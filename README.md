@@ -24,7 +24,7 @@ Attackers use invisible characters, homoglyphs (Cyrillic `а` disguised as Latin
 ### Install from source
 
 ```bash
-git clone https://github.com/gripboard/gripboard.git
+git clone https://github.com/flyawayfpv/gripboard.git
 cd gripboard
 python -m venv .venv
 source .venv/bin/activate
