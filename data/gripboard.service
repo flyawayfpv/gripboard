@@ -1,0 +1,13 @@
+[Unit]
+Description=Gripboard - Clipboard Security Scanner
+Documentation=https://github.com/gripboard/gripboard
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/gripboard gui
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

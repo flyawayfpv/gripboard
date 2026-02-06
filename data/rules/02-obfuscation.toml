@@ -1,0 +1,81 @@
+# Gripboard built-in rules: obfuscation and evasion techniques
+
+[[rules]]
+id = "hex-escape-sequence"
+description = "Suspicious hex escape sequences (potential obfuscation)"
+severity = "medium"
+pattern = '''(\\x[0-9a-fA-F]{2}){4,}'''
+scope = "full"
+tags = ["obfuscation"]
+
+[[rules]]
+id = "octal-escape-sequence"
+description = "Suspicious octal escape sequences"
+severity = "medium"
+pattern = '''(\\[0-3]?[0-7]{2}){4,}'''
+scope = "full"
+tags = ["obfuscation"]
+
+[[rules]]
+id = "dollar-tick-execution"
+description = "Command substitution in suspicious context"
+severity = "medium"
+pattern = '''\$\(.*\b(curl|wget|nc|bash|sh|python)\b.*\)'''
+scope = "line"
+tags = ["shell", "obfuscation"]
+
+[[rules]]
+id = "backtick-execution"
+description = "Backtick command execution"
+severity = "medium"
+pattern = '''`\s*(curl|wget|nc|bash|sh|python)[^`]*`'''
+scope = "line"
+tags = ["shell", "obfuscation"]
+
+[[rules]]
+id = "variable-obfuscation"
+description = "Variable-based command obfuscation"
+severity = "high"
+pattern = '''\$\{?[a-zA-Z_]+\}?\s*\$\{?[a-zA-Z_]+\}?\s*\$\{?[a-zA-Z_]+\}?.*\|\s*(ba)?sh'''
+scope = "line"
+tags = ["shell", "obfuscation"]
+
+[[rules]]
+id = "echo-pipe-shell"
+description = "Echo piped to shell (obfuscated command execution)"
+severity = "high"
+pattern = '''echo\s+.*\|\s*(ba)?sh\b'''
+scope = "line"
+tags = ["shell", "obfuscation"]
+
+[[rules]]
+id = "printf-pipe-shell"
+description = "Printf piped to shell (obfuscated command execution)"
+severity = "high"
+pattern = '''printf\s+.*\|\s*(ba)?sh\b'''
+scope = "line"
+tags = ["shell", "obfuscation"]
+
+[[rules]]
+id = "xargs-exec"
+description = "Suspicious xargs command execution"
+severity = "medium"
+pattern = '''xargs\s+.*\b(sh|bash|rm|curl|wget)\b'''
+scope = "line"
+tags = ["shell", "obfuscation"]
+
+[[rules]]
+id = "crontab-inject"
+description = "Crontab modification (persistence mechanism)"
+severity = "high"
+pattern = '''(crontab|/etc/cron)\s'''
+scope = "line"
+tags = ["shell", "persistence"]
+
+[[rules]]
+id = "systemd-service-create"
+description = "Creating a systemd service (persistence mechanism)"
+severity = "medium"
+pattern = '''(cat|tee|echo).*>\s*/etc/systemd/'''
+scope = "line"
+tags = ["shell", "persistence"]

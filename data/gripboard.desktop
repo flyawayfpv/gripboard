@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Gripboard
+Comment=Clipboard security scanner - detects malicious Unicode content
+Exec=gripboard gui
+Icon=security-high
+Terminal=false
+Categories=Utility;Security;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true

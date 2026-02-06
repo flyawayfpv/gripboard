@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gripboard"
+version = "0.1.0a1"
+description = "Clipboard scanner that detects malicious Unicode tricks in copied code and commands"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "Gripboard Contributors" }]
+keywords = ["clipboard", "security", "unicode", "homoglyph"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Security",
+]
+
+dependencies = []
+
+[project.optional-dependencies]
+server = ["fastapi>=0.110", "uvicorn[standard]>=0.27", "pydantic>=2.0"]
+dev = ["pytest>=7.0", "pytest-cov", "httpx>=0.27"]
+
+[project.scripts]
+gripboard = "gripboard.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["gripboard*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
