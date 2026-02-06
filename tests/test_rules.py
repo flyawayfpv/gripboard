@@ -125,9 +125,8 @@ tags = ["shell", "test"]
 
     def test_builtin_rules_load(self):
         """Ensure the built-in rule files parse without errors."""
-        rules_dir = Path(__file__).parent.parent / "data" / "rules"
-        if not rules_dir.exists():
-            return
+        from gripboard.cli import _BUILTIN_RULES_DIR
         from gripboard.rules import load_rules_from_dir
-        rs = load_rules_from_dir(rules_dir)
+        assert _BUILTIN_RULES_DIR.exists(), f"Rules dir not found: {_BUILTIN_RULES_DIR}"
+        rs = load_rules_from_dir(_BUILTIN_RULES_DIR)
         assert len(rs.rules) > 20  # We shipped ~30 rules

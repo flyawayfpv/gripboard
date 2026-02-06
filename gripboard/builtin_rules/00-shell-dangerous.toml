@@ -1,0 +1,114 @@
+# Gripboard built-in rules: dangerous shell commands
+# These detect common attack patterns found in clipboard content.
+
+[[rules]]
+id = "pipe-to-shell"
+description = "Pipe-to-shell execution (curl/wget piped to sh/bash)"
+severity = "critical"
+pattern = '''(curl|wget)\s+[^\|]+\|\s*(sudo\s+)?(ba)?sh\b'''
+scope = "line"
+tags = ["shell", "remote-exec"]
+
+[[rules]]
+id = "pipe-to-interpreter"
+description = "Remote content piped to interpreter (python/perl/ruby)"
+severity = "critical"
+pattern = '''(curl|wget)\s+[^\|]+\|\s*(sudo\s+)?(python[23]?|perl|ruby|node)\b'''
+scope = "line"
+tags = ["shell", "remote-exec"]
+
+[[rules]]
+id = "rm-rf-root"
+description = "Recursive delete from root or home"
+severity = "critical"
+pattern = '''rm\s+(-[a-zA-Z]*f[a-zA-Z]*\s+)?(-[a-zA-Z]*r[a-zA-Z]*\s+)?(/|~/|\$HOME)\s*$'''
+scope = "line"
+tags = ["shell", "destructive"]
+
+[[rules]]
+id = "rm-rf-force"
+description = "Forced recursive file deletion"
+severity = "high"
+pattern = '''rm\s+-(r|f|rf|fr)[a-zA-Z]*\s'''
+scope = "line"
+tags = ["shell", "destructive"]
+
+[[rules]]
+id = "dd-disk-write"
+description = "Direct disk write with dd"
+severity = "critical"
+pattern = '''dd\s+.*of=/dev/(sd[a-z]|nvme|vd[a-z]|hd[a-z])'''
+scope = "line"
+tags = ["shell", "destructive"]
+
+[[rules]]
+id = "mkfs-format"
+description = "Filesystem format command"
+severity = "critical"
+pattern = '''mkfs(\.[a-z0-9]+)?\s+/dev/'''
+scope = "line"
+tags = ["shell", "destructive"]
+
+[[rules]]
+id = "chmod-777"
+description = "Setting world-writable permissions"
+severity = "high"
+pattern = '''chmod\s+(-[a-zA-Z]+\s+)?777\s'''
+scope = "line"
+tags = ["shell", "permissions"]
+
+[[rules]]
+id = "chmod-suid"
+description = "Setting SUID/SGID bit"
+severity = "critical"
+pattern = '''chmod\s+(-[a-zA-Z]+\s+)?[24]7[0-7]{2}\s'''
+scope = "line"
+tags = ["shell", "permissions", "privilege-escalation"]
+
+[[rules]]
+id = "eval-exec"
+description = "Dynamic code execution via eval/exec"
+severity = "high"
+pattern = '''\b(eval|exec)\s+["'\$\(]'''
+scope = "line"
+tags = ["shell", "code-exec"]
+
+[[rules]]
+id = "base64-decode-exec"
+description = "Base64 decode piped to execution"
+severity = "critical"
+pattern = '''base64\s+(-d|--decode).*\|\s*(ba)?sh'''
+scope = "line"
+tags = ["shell", "obfuscation", "remote-exec"]
+
+[[rules]]
+id = "python-exec-b64"
+description = "Python base64 decode and exec pattern"
+severity = "critical"
+pattern = '''python[23]?\s+.*-c\s+.*base64.*decode'''
+scope = "line"
+tags = ["shell", "obfuscation"]
+
+[[rules]]
+id = "disable-history"
+description = "Shell history manipulation (covering tracks)"
+severity = "high"
+pattern = '''(unset\s+HISTFILE|HISTSIZE=0|history\s+-c|export\s+HISTFILESIZE=0)'''
+scope = "line"
+tags = ["shell", "evasion"]
+
+[[rules]]
+id = "etc-shadow-access"
+description = "Accessing /etc/shadow or /etc/passwd for exfiltration"
+severity = "critical"
+pattern = '''cat\s+/etc/(shadow|passwd)\s*(\||>|>>)'''
+scope = "line"
+tags = ["shell", "exfiltration"]
+
+[[rules]]
+id = "ssh-key-exfil"
+description = "SSH key exfiltration attempt"
+severity = "critical"
+pattern = '''cat\s+.*\.ssh/(id_rsa|id_ed25519|authorized_keys)\s*(\||>|>>|;|\&)'''
+scope = "line"
+tags = ["shell", "exfiltration"]

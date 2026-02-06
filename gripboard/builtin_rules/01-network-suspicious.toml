@@ -1,0 +1,73 @@
+# Gripboard built-in rules: suspicious network activity
+
+[[rules]]
+id = "reverse-shell-bash"
+description = "Bash reverse shell pattern"
+severity = "critical"
+pattern = '''bash\s+(-i\s+)?(&>|>&)\s*/dev/tcp/'''
+scope = "line"
+tags = ["shell", "reverse-shell"]
+
+[[rules]]
+id = "reverse-shell-nc"
+description = "Netcat reverse shell pattern"
+severity = "critical"
+pattern = '''\b(nc|ncat|netcat)\b.*\s+-e\s+/bin/(ba)?sh'''
+scope = "line"
+tags = ["shell", "reverse-shell"]
+
+[[rules]]
+id = "reverse-shell-python"
+description = "Python reverse shell pattern"
+severity = "critical"
+pattern = '''python[23]?\s+.*-c\s+.*socket.*connect.*subprocess'''
+scope = "full"
+tags = ["shell", "reverse-shell"]
+
+[[rules]]
+id = "reverse-shell-perl"
+description = "Perl reverse shell pattern"
+severity = "critical"
+pattern = '''perl\s+.*-e\s+.*socket.*INET.*exec'''
+scope = "full"
+tags = ["shell", "reverse-shell"]
+
+[[rules]]
+id = "reverse-shell-php"
+description = "PHP reverse shell pattern"
+severity = "critical"
+pattern = '''php\s+.*-r\s+.*fsockopen.*exec'''
+scope = "full"
+tags = ["shell", "reverse-shell"]
+
+[[rules]]
+id = "iptables-flush"
+description = "Firewall rules flush"
+severity = "high"
+pattern = '''iptables\s+(-F|--flush)'''
+scope = "line"
+tags = ["shell", "network", "destructive"]
+
+[[rules]]
+id = "dns-exfil"
+description = "Potential DNS exfiltration pattern"
+severity = "high"
+pattern = '''(dig|nslookup|host)\s+.*\$\('''
+scope = "line"
+tags = ["shell", "exfiltration", "dns"]
+
+[[rules]]
+id = "curl-upload"
+description = "Uploading file content via curl POST"
+severity = "medium"
+pattern = '''curl\s+.*(-d\s+@|-F\s+.*=@|--data-binary\s+@)'''
+scope = "line"
+tags = ["shell", "exfiltration", "network"]
+
+[[rules]]
+id = "wget-background"
+description = "Background wget download (stealthy download)"
+severity = "medium"
+pattern = '''wget\s+.*(-b|--background)'''
+scope = "line"
+tags = ["shell", "network", "evasion"]

@@ -18,8 +18,8 @@ from gripboard.scanner import Scanner, Severity
 from gripboard.scoring import ScoreBreakdown, full_analysis
 from gripboard.sync import COMMUNITY_RULES_PATH
 
-# Built-in rules directory
-_BUILTIN_RULES_DIR = Path(__file__).parent.parent / "data" / "rules"
+# Built-in rules directory (shipped inside the package)
+_BUILTIN_RULES_DIR = Path(__file__).parent / "builtin_rules"
 # User rules directory
 _USER_RULES_DIR = Path("~/.config/gripboard/rules").expanduser()
 
@@ -269,10 +269,10 @@ def cmd_scan(args: argparse.Namespace) -> None:
     result.findings.extend(rule_findings)
 
     if result.is_clean and breakdown.total_score == 0:
-        print("Clean - no suspicious characters or patterns found.")
+        print("Clean - no suspicious characters or patterns found.", file=sys.stderr)
         sys.exit(0)
 
-    notifier = _build_notifier(config)
+    notifier = Notifier(mode="terminal", min_severity="low")
     notifier._notify_terminal(result)
     _print_score(breakdown)
 

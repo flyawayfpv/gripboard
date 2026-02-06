@@ -32,5 +32,8 @@ gripboard = "gripboard.cli:main"
 [tool.setuptools.packages.find]
 include = ["gripboard*"]
 
+[tool.setuptools.package-data]
+gripboard = ["builtin_rules/*.toml"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
