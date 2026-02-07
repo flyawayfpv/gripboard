@@ -551,7 +551,7 @@ def cmd_install(args: argparse.Namespace) -> None:
             # Replace existing block
             import re
             pattern = re.escape(_SHELL_RC_MARKER) + r".*?" + re.escape(_SHELL_RC_END)
-            rc_content = re.sub(pattern, snippet, rc_content, flags=re.DOTALL)
+            rc_content = re.sub(pattern, lambda _: snippet, rc_content, flags=re.DOTALL)
             rc_path.write_text(rc_content)
             print(f"Updated shell rc: {rc_path}")
         else:
