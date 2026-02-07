@@ -429,15 +429,14 @@ _SHELL_RC_MARKER = "# >>> gripboard >>>"
 _SHELL_RC_END = "# <<< gripboard <<<"
 
 # Zsh: override accept-line zle widget to pipe $BUFFER through gripboard scan.
-# Exit 0 = clean (execute immediately), 1-2 = warn then execute,
-# 3-4 = warn + prompt, block if declined.
+# Exit 0 = clean (execute immediately), non-zero = warn + prompt, block if declined.
 _ZSH_HOOK = f"""{_SHELL_RC_MARKER}
 _gripboard_accept_line() {{
     [[ -z "$BUFFER" || "$BUFFER" =~ ^[[:space:]]*# ]] && {{ zle .accept-line; return; }}
     local output rc
     output=$(printf '%s\\n' "$BUFFER" | command gripboard scan 2>&1)
     rc=$?
-    if (( rc >= 3 )); then
+    if (( rc >= 1 )); then
         zle -I
         printf '\\n%s\\n' "$output"
         printf '\\e[1;31m[GRIPBOARD]\\e[0m Execute anyway? [y/N] '
@@ -448,10 +447,6 @@ _gripboard_accept_line() {{
         else
             zle reset-prompt
         fi
-    elif (( rc >= 1 )); then
-        zle -I
-        printf '\\n%s\\n' "$output"
-        zle .accept-line
     else
         zle .accept-line
     fi
@@ -467,7 +462,7 @@ _gripboard_preexec() {{
     local output rc
     output=$(printf '%s\\n' "$cmd" | command gripboard scan 2>&1)
     rc=$?
-    if (( rc >= 3 )); then
+    if (( rc >= 1 )); then
         printf '\\n%s\\n' "$output" >&2
         read -rp $'\\e[1;31m[GRIPBOARD]\\e[0m Execute anyway? [y/N] ' ans
         if [[ "$ans" == [yY] ]]; then
@@ -475,8 +470,6 @@ _gripboard_preexec() {{
         else
             return 1
         fi
-    elif (( rc >= 1 )); then
-        printf '\\n%s\\n' "$output" >&2
     fi
     return 0
 }}
@@ -491,14 +484,12 @@ function _gripboard_preexec --on-event fish_preexec
     test -z "$cmd"; and return
     set -l output (printf '%s\\n' "$cmd" | command gripboard scan 2>&1)
     set -l rc $status
-    if test $rc -ge 3
+    if test $rc -ge 1
         printf '\\n%s\\n' $output >&2
         read -l -P '\\e[1;31m[GRIPBOARD]\\e[0m Execute anyway? [y/N] ' ans
         if not string match -qi 'y' -- $ans
             commandline -f cancel-commandline
         end
-    else if test $rc -ge 1
-        printf '\\n%s\\n' $output >&2
     end
 end
 {_SHELL_RC_END}"""
