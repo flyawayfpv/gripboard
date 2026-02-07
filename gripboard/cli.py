@@ -399,15 +399,114 @@ def cmd_serve(args: argparse.Namespace) -> None:
     )
 
 
+def _find_gripboard_bin() -> Path:
+    """Find the actual gripboard executable path."""
+    import shutil
+    # Check if gripboard is already on PATH
+    which = shutil.which("gripboard")
+    if which:
+        return Path(which)
+    # Fall back to the venv bin that's running us
+    return Path(sys.executable).parent / "gripboard"
+
+
+def _detect_shell() -> tuple[str, Path | None]:
+    """Detect the user's default shell and its rc file."""
+    import os
+    shell = os.environ.get("SHELL", "")
+    shell_name = Path(shell).name if shell else ""
+
+    rc_files = {
+        "zsh": Path.home() / ".zshrc",
+        "bash": Path.home() / ".bashrc",
+        "fish": Path.home() / ".config" / "fish" / "config.fish",
+    }
+
+    return shell_name, rc_files.get(shell_name)
+
+
+_SHELL_RC_MARKER = "# >>> gripboard >>>"
+_SHELL_RC_END = "# <<< gripboard <<<"
+
+
 def cmd_install(args: argparse.Namespace) -> None:
-    """Install autostart and systemd service for the current user."""
+    """Install gripboard: symlink to PATH, shell rc integration, systemd service."""
     import shutil
     data_dir = Path(__file__).parent.parent / "data"
 
     # Ensure config exists
     init_config(args.config)
 
-    # Install XDG autostart entry
+    gripboard_bin = _find_gripboard_bin()
+    print(f"Gripboard binary: {gripboard_bin}")
+
+    # 1. Symlink into ~/.local/bin so it's on PATH
+    local_bin = Path.home() / ".local" / "bin"
+    local_bin.mkdir(parents=True, exist_ok=True)
+    symlink_dst = local_bin / "gripboard"
+
+    if symlink_dst.exists() or symlink_dst.is_symlink():
+        symlink_dst.unlink()
+    symlink_dst.symlink_to(gripboard_bin)
+    print(f"Symlinked: {symlink_dst} -> {gripboard_bin}")
+
+    # Check if ~/.local/bin is on PATH
+    import os
+    path_dirs = os.environ.get("PATH", "").split(":")
+    if str(local_bin) not in path_dirs:
+        print(f"  Note: {local_bin} is not on your PATH yet.")
+        print(f"  Add this to your shell rc: export PATH=\"$HOME/.local/bin:$PATH\"")
+
+    # 2. Shell rc integration (background watch on terminal startup)
+    shell_name, rc_path = _detect_shell()
+
+    if rc_path and not args.no_rc:
+        # Build the rc snippet
+        if shell_name == "fish":
+            snippet = (
+                f"{_SHELL_RC_MARKER}\n"
+                f"if type -q gripboard; and not pgrep -x gripboard >/dev/null\n"
+                f"    gripboard watch &>/dev/null &\n"
+                f"    disown\n"
+                f"end\n"
+                f"{_SHELL_RC_END}"
+            )
+        else:
+            snippet = (
+                f"{_SHELL_RC_MARKER}\n"
+                f"if command -v gripboard &>/dev/null && ! pgrep -x gripboard &>/dev/null; then\n"
+                f"    gripboard watch &>/dev/null &\n"
+                f"    disown\n"
+                f"fi\n"
+                f"{_SHELL_RC_END}"
+            )
+
+        # Check if already installed
+        if rc_path.exists():
+            rc_content = rc_path.read_text()
+        else:
+            rc_content = ""
+
+        if _SHELL_RC_MARKER in rc_content:
+            # Replace existing block
+            import re
+            pattern = re.escape(_SHELL_RC_MARKER) + r".*?" + re.escape(_SHELL_RC_END)
+            rc_content = re.sub(pattern, snippet, rc_content, flags=re.DOTALL)
+            rc_path.write_text(rc_content)
+            print(f"Updated shell rc: {rc_path}")
+        else:
+            # Append
+            with open(rc_path, "a") as f:
+                f.write(f"\n{snippet}\n")
+            print(f"Added to shell rc: {rc_path}")
+
+        print(f"  Gripboard will auto-start in background on new {shell_name} sessions.")
+    elif args.no_rc:
+        print("Skipped shell rc integration (--no-rc).")
+    else:
+        print(f"  Could not detect shell rc file (shell: {shell_name or 'unknown'}).")
+
+    # 3. XDG autostart entry
     autostart_dir = Path.home() / ".config" / "autostart"
     autostart_dir.mkdir(parents=True, exist_ok=True)
     desktop_src = data_dir / "gripboard.desktop"
@@ -416,7 +515,7 @@ def cmd_install(args: argparse.Namespace) -> None:
         shutil.copy2(desktop_src, desktop_dst)
         print(f"Autostart entry: {desktop_dst}")
 
-    # Install systemd user service
+    # 4. Systemd user service
     systemd_dir = Path.home() / ".config" / "systemd" / "user"
     systemd_dir.mkdir(parents=True, exist_ok=True)
     service_src = data_dir / "gripboard.service"
@@ -426,7 +525,41 @@ def cmd_install(args: argparse.Namespace) -> None:
         print(f"Systemd service: {service_dst}")
         print("  Enable with: systemctl --user enable --now gripboard")
 
-    print("Installation complete.")
+    print("\nInstallation complete. Open a new terminal to activate.")
+
+
+def cmd_uninstall(args: argparse.Namespace) -> None:
+    """Remove gripboard from shell rc, symlink, and autostart."""
+    # Remove symlink
+    symlink_dst = Path.home() / ".local" / "bin" / "gripboard"
+    if symlink_dst.exists() or symlink_dst.is_symlink():
+        symlink_dst.unlink()
+        print(f"Removed symlink: {symlink_dst}")
+
+    # Remove shell rc block
+    _shell_name, rc_path = _detect_shell()
+    if rc_path and rc_path.exists():
+        import re
+        rc_content = rc_path.read_text()
+        if _SHELL_RC_MARKER in rc_content:
+            pattern = r"\n?" + re.escape(_SHELL_RC_MARKER) + r".*?" + re.escape(_SHELL_RC_END) + r"\n?"
+            rc_content = re.sub(pattern, "\n", rc_content, flags=re.DOTALL)
+            rc_path.write_text(rc_content)
+            print(f"Removed from shell rc: {rc_path}")
+
+    # Remove autostart
+    autostart = Path.home() / ".config" / "autostart" / "gripboard.desktop"
+    if autostart.exists():
+        autostart.unlink()
+        print(f"Removed autostart: {autostart}")
+
+    # Remove systemd service
+    service = Path.home() / ".config" / "systemd" / "user" / "gripboard.service"
+    if service.exists():
+        service.unlink()
+        print(f"Removed systemd service: {service}")
+
+    print("Uninstall complete.")
 
 
 def main() -> None:
@@ -524,15 +657,25 @@ def main() -> None:
 
     # install
     install_parser = subparsers.add_parser(
-        "install", help="Install autostart and systemd user service",
+        "install", help="Install: symlink to PATH, shell rc, systemd service",
+    )
+    install_parser.add_argument(
+        "--no-rc", action="store_true",
+        help="Skip adding gripboard to shell rc file",
     )
     install_parser.set_defaults(func=cmd_install)
 
+    # uninstall
+    uninstall_parser = subparsers.add_parser(
+        "uninstall", help="Remove gripboard from PATH, shell rc, and autostart",
+    )
+    uninstall_parser.set_defaults(func=cmd_uninstall)
+
     args = parser.parse_args()
     if not args.command:
-        # Default to GUI mode
-        args.func = cmd_gui
-        cmd_gui(args)
+        # Default to watch mode
+        args.func = cmd_watch
+        cmd_watch(args)
         return
 
     args.func(args)
