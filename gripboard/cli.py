@@ -481,6 +481,9 @@ _gripboard_accept_line() {{
         if [[ "$REPLY" == [yY] ]]; then
             zle .accept-line
         else
+            local _gripboard_cmd="$BUFFER"
+            mkdir -p ~/.local/share/gripboard && printf '%s\t%s\n' "$(date -Iseconds)" "$_gripboard_cmd" >> ~/.local/share/gripboard/rejected.log
+            BUFFER=""
             zle reset-prompt
         fi
     else
@@ -505,6 +508,8 @@ _gripboard_preexec() {{
         if [[ "$ans" == [yY] ]]; then
             return 0
         else
+            mkdir -p ~/.local/share/gripboard && printf '%s\t%s\n' "$(date -Iseconds)" "$cmd" >> ~/.local/share/gripboard/rejected.log
+            history -d $((HISTCMD)) 2>/dev/null
             return 1
         fi
     fi
@@ -525,6 +530,8 @@ function _gripboard_preexec --on-event fish_preexec
         printf '\\n%s\\n' $output >&2
         read -l -P '\\e[1;31m[GRIPBOARD]\\e[0m Execute anyway? [y/N] ' ans
         if not string match -qi 'y' -- $ans
+            mkdir -p ~/.local/share/gripboard; and printf '%s\t%s\n' (date -Iseconds) "$cmd" >> ~/.local/share/gripboard/rejected.log
+            commandline ''
             commandline -f cancel-commandline
         end
     end
