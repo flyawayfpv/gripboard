@@ -428,6 +428,91 @@ def _detect_shell() -> tuple[str, Path | None]:
 _SHELL_RC_MARKER = "# >>> gripboard >>>"
 _SHELL_RC_END = "# <<< gripboard <<<"
 
+# Zsh: override accept-line zle widget to pipe $BUFFER through gripboard scan.
+# Exit 0 = clean (execute immediately), 1-2 = warn then execute,
+# 3-4 = warn + prompt, block if declined.
+_ZSH_HOOK = f"""{_SHELL_RC_MARKER}
+_gripboard_accept_line() {{
+    [[ -z "$BUFFER" || "$BUFFER" =~ ^[[:space:]]*# ]] && {{ zle .accept-line; return; }}
+    local output rc
+    output=$(printf '%s\\n' "$BUFFER" | command gripboard scan 2>&1)
+    rc=$?
+    if (( rc >= 3 )); then
+        zle -I
+        printf '\\n%s\\n' "$output"
+        printf '\\e[1;31m[GRIPBOARD]\\e[0m Execute anyway? [y/N] '
+        read -rk1
+        printf '\\n'
+        if [[ "$REPLY" == [yY] ]]; then
+            zle .accept-line
+        else
+            zle reset-prompt
+        fi
+    elif (( rc >= 1 )); then
+        zle -I
+        printf '\\n%s\\n' "$output"
+        zle .accept-line
+    else
+        zle .accept-line
+    fi
+}}
+zle -N accept-line _gripboard_accept_line
+{_SHELL_RC_END}"""
+
+# Bash: use extdebug + DEBUG trap. Returning 1 from the trap prevents execution.
+_BASH_HOOK = f"""{_SHELL_RC_MARKER}
+_gripboard_preexec() {{
+    local cmd="$1"
+    [[ -z "$cmd" || "$cmd" =~ ^[[:space:]]*# ]] && return 0
+    local output rc
+    output=$(printf '%s\\n' "$cmd" | command gripboard scan 2>&1)
+    rc=$?
+    if (( rc >= 3 )); then
+        printf '\\n%s\\n' "$output" >&2
+        read -rp $'\\e[1;31m[GRIPBOARD]\\e[0m Execute anyway? [y/N] ' ans
+        if [[ "$ans" == [yY] ]]; then
+            return 0
+        else
+            return 1
+        fi
+    elif (( rc >= 1 )); then
+        printf '\\n%s\\n' "$output" >&2
+    fi
+    return 0
+}}
+shopt -s extdebug
+trap '_gripboard_preexec "$BASH_COMMAND"' DEBUG
+{_SHELL_RC_END}"""
+
+# Fish: use fish_preexec event function.
+_FISH_HOOK = f"""{_SHELL_RC_MARKER}
+function _gripboard_preexec --on-event fish_preexec
+    set -l cmd $argv[1]
+    test -z "$cmd"; and return
+    set -l output (printf '%s\\n' "$cmd" | command gripboard scan 2>&1)
+    set -l rc $status
+    if test $rc -ge 3
+        printf '\\n%s\\n' $output >&2
+        read -l -P '\\e[1;31m[GRIPBOARD]\\e[0m Execute anyway? [y/N] ' ans
+        if not string match -qi 'y' -- $ans
+            commandline -f cancel-commandline
+        end
+    else if test $rc -ge 1
+        printf '\\n%s\\n' $output >&2
+    end
+end
+{_SHELL_RC_END}"""
+
+
+def _shell_hook_snippet(shell_name: str) -> str:
+    """Return the appropriate shell hook snippet for the given shell."""
+    hooks = {
+        "zsh": _ZSH_HOOK,
+        "bash": _BASH_HOOK,
+        "fish": _FISH_HOOK,
+    }
+    return hooks.get(shell_name, _BASH_HOOK)
+
 
 def cmd_install(args: argparse.Namespace) -> None:
     """Install gripboard: symlink to PATH, shell rc integration, systemd service."""
@@ -457,29 +542,13 @@ def cmd_install(args: argparse.Namespace) -> None:
         print(f"  Note: {local_bin} is not on your PATH yet.")
         print(f"  Add this to your shell rc: export PATH=\"$HOME/.local/bin:$PATH\"")
 
-    # 2. Shell rc integration (background watch on terminal startup)
+    # 2. Shell rc integration (preexec hook to scan commands before execution)
     shell_name, rc_path = _detect_shell()
 
     if rc_path and not args.no_rc:
-        # Build the rc snippet
-        if shell_name == "fish":
-            snippet = (
-                f"{_SHELL_RC_MARKER}\n"
-                f"if type -q gripboard; and not pgrep -x gripboard >/dev/null\n"
-                f"    gripboard watch &>/dev/null &\n"
-                f"    disown\n"
-                f"end\n"
-                f"{_SHELL_RC_END}"
-            )
-        else:
-            snippet = (
-                f"{_SHELL_RC_MARKER}\n"
-                f"if command -v gripboard &>/dev/null && ! pgrep -x gripboard &>/dev/null; then\n"
-                f"    gripboard watch &>/dev/null &\n"
-                f"    disown\n"
-                f"fi\n"
-                f"{_SHELL_RC_END}"
-            )
+        # Build the rc snippet with a preexec hook that scans commands
+        # before execution via `gripboard scan`.
+        snippet = _shell_hook_snippet(shell_name)
 
         # Check if already installed
         if rc_path.exists():
@@ -500,7 +569,7 @@ def cmd_install(args: argparse.Namespace) -> None:
                 f.write(f"\n{snippet}\n")
             print(f"Added to shell rc: {rc_path}")
 
-        print(f"  Gripboard will auto-start in background on new {shell_name} sessions.")
+        print(f"  Gripboard will scan commands before execution in new {shell_name} sessions.")
     elif args.no_rc:
         print("Skipped shell rc integration (--no-rc).")
     else:
