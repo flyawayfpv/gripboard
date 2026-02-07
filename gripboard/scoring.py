@@ -55,6 +55,7 @@ class ScoreBreakdown:
     total_score: int = 0
     severity: Severity = Severity.SAFE
     details: list[str] = field(default_factory=list)
+    shell_analyses: list[CommandAnalysis] | None = None
 
 
 def compute_score(
@@ -96,6 +97,7 @@ def compute_score(
         )
 
     # 3. Shell command analysis
+    breakdown.shell_analyses = shell_analyses
     if shell_analyses:
         breakdown.shell_commands_analyzed = len(shell_analyses)
         for a in shell_analyses:

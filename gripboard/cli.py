@@ -16,6 +16,7 @@ from gripboard.rules import Ruleset, load_rules_from_dir, load_rules_from_toml
 from gripboard.sanitizer import clear_clipboard, sanitize, write_clipboard
 from gripboard.scanner import Scanner, Severity
 from gripboard.scoring import ScoreBreakdown, full_analysis
+from gripboard.shellparser import CommandRisk
 from gripboard.sync import COMMUNITY_RULES_PATH
 
 # Built-in rules directory (shipped inside the package)
@@ -76,7 +77,7 @@ def _build_notifier(config: GripboardConfig) -> Notifier:
     )
 
 
-def _print_score(breakdown: ScoreBreakdown) -> None:
+def _print_score(breakdown: ScoreBreakdown, content: str = "") -> None:
     """Print the heuristic score breakdown to stderr."""
     color = {
         Severity.SAFE: "\033[32m",
@@ -86,6 +87,40 @@ def _print_score(breakdown: ScoreBreakdown) -> None:
         Severity.CRITICAL: "\033[1;31m",
     }.get(breakdown.severity, "")
     reset = "\033[0m"
+
+    _risk_colors = {
+        CommandRisk.SAFE: "\033[32m",
+        CommandRisk.INFO: "\033[32m",
+        CommandRisk.CAUTION: "\033[33m",
+        CommandRisk.DANGEROUS: "\033[31m",
+        CommandRisk.CRITICAL: "\033[1;31m",
+    }
+
+    # Per-line summary for multi-line input
+    if "\n" in content and breakdown.shell_analyses:
+        print("  Lines:", file=sys.stderr)
+        lines = content.strip().splitlines()
+        # Build a map from raw line text to its analysis
+        analysis_map = {a.raw: a for a in breakdown.shell_analyses}
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+            analysis = analysis_map.get(stripped)
+            if analysis:
+                rc = _risk_colors.get(analysis.risk, "")
+                label = analysis.risk.value.upper()
+                reason = ""
+                if analysis.reasons:
+                    reason = f"  {analysis.reasons[0]}"
+                print(
+                    f"    {i}: {stripped:<40s} {rc}{label}{reset}{reason}",
+                    file=sys.stderr,
+                )
+            else:
+                # Comment or blank line
+                print(
+                    f"    {i}: {stripped:<40s} \033[32mSAFE\033[0m",
+                    file=sys.stderr,
+                )
 
     print(
         f"  {color}Risk Score: {breakdown.total_score}/100 "
@@ -274,7 +309,7 @@ def cmd_scan(args: argparse.Namespace) -> None:
 
     notifier = Notifier(mode="terminal", min_severity="low")
     notifier._notify_terminal(result)
-    _print_score(breakdown)
+    _print_score(breakdown, content)
 
     # Show sanitized version
     sanitized_text = sanitize(result)
@@ -431,6 +466,7 @@ _SHELL_RC_END = "# <<< gripboard <<<"
 # Zsh: override accept-line zle widget to pipe $BUFFER through gripboard scan.
 # Exit 0 = clean (execute immediately), non-zero = warn + prompt, block if declined.
 _ZSH_HOOK = f"""{_SHELL_RC_MARKER}
+autoload -Uz bracketed-paste-magic && zle -N bracketed-paste bracketed-paste-magic
 _gripboard_accept_line() {{
     [[ -z "$BUFFER" || "$BUFFER" =~ ^[[:space:]]*# ]] && {{ zle .accept-line; return; }}
     local output rc
@@ -456,6 +492,7 @@ zle -N accept-line _gripboard_accept_line
 
 # Bash: use extdebug + DEBUG trap. Returning 1 from the trap prevents execution.
 _BASH_HOOK = f"""{_SHELL_RC_MARKER}
+bind 'set enable-bracketed-paste on'
 _gripboard_preexec() {{
     local cmd="$1"
     [[ -z "$cmd" || "$cmd" =~ ^[[:space:]]*# ]] && return 0
