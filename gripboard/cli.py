@@ -437,12 +437,16 @@ def cmd_serve(args: argparse.Namespace) -> None:
 def _find_gripboard_bin() -> Path:
     """Find the actual gripboard executable path."""
     import shutil
-    # Check if gripboard is already on PATH
+    # Prefer the binary co-located with the running Python interpreter (current venv).
+    # This avoids following a stale symlink already on PATH from a previous install.
+    local = Path(sys.executable).parent / "gripboard"
+    if local.exists():
+        return local
+    # Fall back to PATH lookup
     which = shutil.which("gripboard")
     if which:
         return Path(which)
-    # Fall back to the venv bin that's running us
-    return Path(sys.executable).parent / "gripboard"
+    return local
 
 
 def _detect_shell() -> tuple[str, Path | None]:
@@ -464,27 +468,39 @@ _SHELL_RC_MARKER = "# >>> gripboard >>>"
 _SHELL_RC_END = "# <<< gripboard <<<"
 
 # Zsh: override accept-line zle widget to pipe $BUFFER through gripboard scan.
-# Exit 0 = clean (execute immediately), non-zero = warn + prompt, block if declined.
+# Only intercepts pasted input that contains a sudo invocation.
 _ZSH_HOOK = f"""{_SHELL_RC_MARKER}
-autoload -Uz bracketed-paste-magic && zle -N bracketed-paste bracketed-paste-magic
+autoload -Uz bracketed-paste-magic
+typeset -g _GRIPBOARD_PASTED=0
+_gripboard_bracketed_paste() {{
+    _GRIPBOARD_PASTED=1
+    bracketed-paste-magic
+}}
+zle -N bracketed-paste _gripboard_bracketed_paste
 _gripboard_accept_line() {{
+    local _was_pasted=$_GRIPBOARD_PASTED
+    _GRIPBOARD_PASTED=0
     [[ -z "$BUFFER" || "$BUFFER" =~ ^[[:space:]]*# ]] && {{ zle .accept-line; return; }}
-    local output rc
-    output=$(printf '%s\\n' "$BUFFER" | command gripboard scan 2>&1)
-    rc=$?
-    if (( rc >= 1 )); then
-        zle -I
-        printf '\\n%s\\n' "$output"
-        printf '\\e[1;31m[GRIPBOARD]\\e[0m Execute anyway? [y/N] '
-        read -rk1
-        printf '\\n'
-        if [[ "$REPLY" == [yY] ]]; then
-            zle .accept-line
+    if (( _was_pasted )) && [[ "$BUFFER" =~ (^|[^[:alnum:]_])sudo([^[:alnum:]_]|$) ]]; then
+        local output rc
+        output=$(printf '%s\\n' "$BUFFER" | command gripboard scan 2>&1)
+        rc=$?
+        if (( rc >= 1 )); then
+            zle -I
+            printf '\\n%s\\n' "$output"
+            printf '\\e[1;31m[GRIPBOARD]\\e[0m Execute anyway? [y/N] '
+            read -rk1
+            printf '\\n'
+            if [[ "$REPLY" == [yY] ]]; then
+                zle .accept-line
+            else
+                local _gripboard_cmd="$BUFFER"
+                mkdir -p ~/.local/share/gripboard && printf '%s\t%s\n' "$(date -Iseconds)" "$_gripboard_cmd" >> ~/.local/share/gripboard/rejected.log
+                BUFFER=""
+                zle reset-prompt
+            fi
         else
-            local _gripboard_cmd="$BUFFER"
-            mkdir -p ~/.local/share/gripboard && printf '%s\t%s\n' "$(date -Iseconds)" "$_gripboard_cmd" >> ~/.local/share/gripboard/rejected.log
-            BUFFER=""
-            zle reset-prompt
+            zle .accept-line
         fi
     else
         zle .accept-line
@@ -494,11 +510,13 @@ zle -N accept-line _gripboard_accept_line
 {_SHELL_RC_END}"""
 
 # Bash: use extdebug + DEBUG trap. Returning 1 from the trap prevents execution.
+# Only intercepts commands that contain a sudo invocation.
 _BASH_HOOK = f"""{_SHELL_RC_MARKER}
 bind 'set enable-bracketed-paste on'
 _gripboard_preexec() {{
     local cmd="$1"
     [[ -z "$cmd" || "$cmd" =~ ^[[:space:]]*# ]] && return 0
+    [[ ! "$cmd" =~ (^|[^[:alnum:]_])sudo([^[:alnum:]_]|$) ]] && return 0
     local output rc
     output=$(printf '%s\\n' "$cmd" | command gripboard scan 2>&1)
     rc=$?
@@ -520,10 +538,12 @@ trap '_gripboard_preexec "$BASH_COMMAND"' DEBUG
 {_SHELL_RC_END}"""
 
 # Fish: use fish_preexec event function.
+# Only intercepts commands that contain a sudo invocation.
 _FISH_HOOK = f"""{_SHELL_RC_MARKER}
 function _gripboard_preexec --on-event fish_preexec
     set -l cmd $argv[1]
     test -z "$cmd"; and return
+    echo $cmd | grep -qw sudo; or return
     set -l output (printf '%s\\n' "$cmd" | command gripboard scan 2>&1)
     set -l rc $status
     if test $rc -ge 1
